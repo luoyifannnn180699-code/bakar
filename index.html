@@ -736,14 +736,15 @@ class UjianKuApp {
         
         this.initApp();
     }
-    initApp() {
-        this.loadLocalStorageData();
-        this.setupEventListeners();
-        this.renderLoginSubjects();
-        this.switchView('login');
-        this.showIntroScreen();
-        console.log('✅ UjianKu Pro initialized | Teachers:', this.state.teachers.length);
-    }
+   async initApp() {
+    this.loadLocalStorageData();
+    await this.fetchDataFromServer(); // <-- TAMBAHKAN BARIS INI
+    this.setupEventListeners();
+    this.renderLoginSubjects();
+    this.switchView('login');
+    this.showIntroScreen();
+    console.log('✅ UjianKu Pro initialized');
+}
 
     showIntroScreen() {
         const intro = document.getElementById('introScreen');
@@ -1603,6 +1604,7 @@ class UjianKuApp {
             'warning',
             () => { this.openTeacherAuthModal(); }
         );
+        this.syncDataToServer(); //
     }
 
     openTeacherProfileModal() {
@@ -1634,6 +1636,7 @@ class UjianKuApp {
         this.closeTeacherProfileModal();
         this.loadTeacherData();
         this.showModal('Berhasil', 'Akun diperbarui.', 'warning');
+        this.syncDataToServer(); //
     }
 
     logoutTeacher() {
@@ -1874,8 +1877,9 @@ class UjianKuApp {
             this.clearNewQuestionImage();
             this.handleQuestionTypeChange();
             this.renderTeacherQuestions();
-            this.showModal('Berhasil', 'Soal ditambahkan.', 'warning');
-        }).catch(err => {
+    this.showModal('Berhasil', 'Soal ditambahkan.', 'warning');
+    this.syncDataToServer(); // <-- TAMBAHKAN INI
+}).catch(err => {
             console.error('Media error:', err);
             this.showModal('Gagal', 'File media gagal dibaca.', 'warning');
         });
@@ -1962,9 +1966,10 @@ class UjianKuApp {
         this.showModal('Konfirmasi', 'Hapus soal ini?', 'confirm', () => {
             this.state.questions = this.state.questions.filter(q => q.id !== id);
             localStorage.setItem('ujianku_questions', JSON.stringify(this.state.questions));
-            this.renderTeacherQuestions();
-        });
-    }
+        this.renderTeacherQuestions();
+        this.syncDataToServer(); // <-- TAMBAHKAN INI
+    });
+}
 
     renderTeacherSettings() {
         document.getElementById('settingDuration').value = this.state.settings.duration;
@@ -1977,6 +1982,7 @@ class UjianKuApp {
         this.state.settings = { ...this.state.settings, duration, token };
         localStorage.setItem('ujianku_settings', JSON.stringify(this.state.settings));
         this.showModal('Berhasil', `Pengaturan disimpan.\n\nDurasi: ${duration} menit\nToken: ${token}`, 'warning');
+        this.syncDataToServer(); //
     }
 
     handleImportMultiFile() {
@@ -2259,7 +2265,7 @@ btnConfirm.onclick = () => { this.closeModal(); if (onConfirm) onConfirm(); };
     }
 
     // ============ FUNGSI PENGIRIM DATA KE GOOGLE SHEETS ============
-    sendToGoogleSheet(studentData, reason = '-') {
+   sendToGoogleSheet(studentData, reason = '-') {
         if (!this.scriptURL || this.scriptURL === 'PASTE_URL_WEB_APP_ANDA_DI_SINI') {
             console.warn('⚠️ URL Google Sheets belum diatur!');
             return;
@@ -2284,6 +2290,42 @@ btnConfirm.onclick = () => { this.closeModal(); if (onConfirm) onConfirm(); };
         })
         .then(() => console.log('✅ Data berhasil dikirim ke Google Sheets'))
         .catch(err => console.error('❌ Gagal mengirim data:', err));
+    }
+
+    // ============ FUNGSI BARU: CLOUD SYNC ============
+    async fetchDataFromServer() {
+        try {
+            const response = await fetch(this.scriptURL + '?action=getData');
+            const data = await response.json();
+            if (data.teachers && data.questions && data.teachers.length > 0) {
+                this.state.teachers = data.teachers;
+                this.state.questions = data.questions;
+                localStorage.setItem('ujianku_teachers', JSON.stringify(data.teachers));
+                localStorage.setItem('ujianku_questions', JSON.stringify(data.questions));
+                console.log('✅ Data synced from Google Sheets');
+            }
+        } catch (e) {
+            console.warn('⚠️ Gagal sync dari server, menggunakan data lokal');
+        }
+    }
+
+    async syncDataToServer() {
+        const payload = {
+            action: 'saveConfig',
+            teachers: this.state.teachers,
+            questions: this.state.questions
+        };
+        try {
+            await fetch(this.scriptURL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            console.log('✅ Data berhasil disimpan ke server');
+        } catch (e) {
+            console.error('❌ Gagal menyimpan ke server', e);
+        }
     }
 } // <-- INI ADALAH PENUTUP CLASS UjianKuApp
 
