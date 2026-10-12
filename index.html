@@ -729,10 +729,13 @@ class UjianKuApp {
             MAX_VIOLATIONS: 2,
             screenPaused: false,
             audioPermissionPending: false
-        };
+        }; // <-- Pastikan ada titik koma di sini
+        
+        // TAMBAHKAN URL ANDA DI SINI (di luar this.state)
+        this.scriptURL = 'https://script.google.com/macros/s/AKfycbxBN9DHZr0QnrbRLpic4qQDb5W5uGZ1G5u0wtWZSJxgMNjbBeOaaG3hAs55zdK4LV306A/exec'; 
+        
         this.initApp();
     }
-
     initApp() {
         this.loadLocalStorageData();
         this.setupEventListeners();
@@ -1002,6 +1005,7 @@ class UjianKuApp {
             localStorage.setItem('ujianku_all_students_history', JSON.stringify(history));
         }
         localStorage.removeItem('ujianku_active_student');
+        this.sendToGoogleSheet(this.state.student, reason);
         const screen = document.getElementById('disqualifiedScreen');
         document.getElementById('disqualifyReason').innerText = reason;
         document.getElementById('disqualifyCount').innerText = this.state.violationCount;
@@ -1477,6 +1481,7 @@ class UjianKuApp {
         localStorage.removeItem('ujianku_active_student');
         this.state.examStarted = false;
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        this.sendToGoogleSheet(this.state.student);
         this.switchView('result');
     }
 
@@ -2234,7 +2239,7 @@ class UjianKuApp {
             icon.className = 'w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl bg-emerald-50 text-emerald-600';
             icon.innerHTML = '<i class="fa-solid fa-circle-question"></i>';
             btnCancel.classList.remove('hidden');
-            btnConfirm.onclick = () => { this.closeModal(); if (onConfirm) onConfirm(); };
+btnConfirm.onclick = () => { this.closeModal(); if (onConfirm) onConfirm(); };
             btnCancel.onclick = () => this.closeModal();
         } else {
             icon.className = 'w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl bg-amber-50 text-amber-600';
@@ -2252,7 +2257,35 @@ class UjianKuApp {
         box.classList.add('scale-95', 'opacity-0');
         setTimeout(() => modal.classList.add('hidden'), 200);
     }
-}
+
+    // ============ FUNGSI PENGIRIM DATA KE GOOGLE SHEETS ============
+    sendToGoogleSheet(studentData, reason = '-') {
+        if (!this.scriptURL || this.scriptURL === 'PASTE_URL_WEB_APP_ANDA_DI_SINI') {
+            console.warn('⚠️ URL Google Sheets belum diatur!');
+            return;
+        }
+
+        const payload = {
+            nama: studentData.name,
+            kelas: studentData.class,
+            mapel: studentData.subject,
+            skor: studentData.scorePG || 0,
+            status: reason !== '-' ? 'DISKUALIFIKASI' : 'SELESAI',
+            alasan: reason
+        };
+
+        fetch(this.scriptURL, {
+            method: 'POST',
+            mode: 'no-cors', 
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(() => console.log('✅ Data berhasil dikirim ke Google Sheets'))
+        .catch(err => console.error('❌ Gagal mengirim data:', err));
+    }
+} // <-- INI ADALAH PENUTUP CLASS UjianKuApp
 
 const app = new UjianKuApp();
 
