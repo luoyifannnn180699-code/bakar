@@ -381,8 +381,10 @@ audio { border-radius: 12px; height: 44px; }
                     <div>
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Target Kelas</label>
                         <select id="newQClass" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"></select>
-                    </div>
-                    <div>
+                  <div>
+    <label class="block text-xs font-semibold text-slate-700 mb-1">Bab / Materi (Opsional)</label>
+    <input type="text" id="newQBab" placeholder="Contoh: Bab 1" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+</div>
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Jenis</label>
                         <select id="newQType" onchange="app.handleQuestionTypeChange()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
                             <option value="pg">Pilihan Ganda</option>
@@ -1811,6 +1813,7 @@ class UjianKuApp {
         const targetClass = document.getElementById('newQClass').value;
         const type = document.getElementById('newQType').value;
         const qText = document.getElementById('newQText').value.trim();
+        const bab = document.getElementById('newQBab').value.trim() || '-';
         if (!qText) return;
 
         let options = {}, key = '';
@@ -1860,6 +1863,7 @@ class UjianKuApp {
                 teacherId: this.state.currentTeacher.id,
                 subject: this.state.currentTeacher.subject,
                 targetClass, type,
+                bab : bab,
                 question: qText, options, key,
                 audio: audioData,
                 image: imageData
@@ -1873,6 +1877,7 @@ class UjianKuApp {
                 return;
             }
             document.getElementById('formAddQuestion').reset();
+            document.getElementById('newQBab').value = ''; //
             this.clearNewQuestionAudio();
             this.clearNewQuestionImage();
             this.handleQuestionTypeChange();
@@ -1893,7 +1898,7 @@ class UjianKuApp {
         const newQClass = document.getElementById('newQClass');
         const importTargetClass = document.getElementById('importTargetClass');
         const filterQuestionClass = document.getElementById('filterQuestionClass');
-
+        const filterQuestionBab = document.getElementById('filterQuestionBab');
         [newQClass, importTargetClass].forEach(el => {
             if (el) {
                 const curVal = el.value;
@@ -1907,20 +1912,30 @@ class UjianKuApp {
             }
         });
 
-        if (filterQuestionClass) {
-            const curFilter = filterQuestionClass.value;
-            filterQuestionClass.innerHTML = '<option value="ALL">Semua Kelas</option>';
-            teacherClasses.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c; opt.innerText = c;
-                filterQuestionClass.appendChild(opt);
-            });
-            filterQuestionClass.value = curFilter || 'ALL';
-        }
+      if (filterQuestionBab) {
+    const curFilter = filterQuestionBab.value;
+    const allBabs = [...new Set(this.state.questions.filter(q => q.subject === teacherSubject).map(q => q.bab || '-'))];
+    filterQuestionBab.innerHTML = '<option value="ALL">Semua Bab</option>';
+    allBabs.sort().forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b; opt.innerText = b;
+        filterQuestionBab.appendChild(opt);
+    });
+    filterQuestionBab.value = curFilter || 'ALL';
+}
 
         const filterClass = filterQuestionClass ? filterQuestionClass.value : 'ALL';
         let teacherQuestions = this.state.questions.filter(q => q.subject === teacherSubject);
         if (filterClass !== 'ALL') teacherQuestions = teacherQuestions.filter(q => q.targetClass === filterClass);
+        const filterBab = filterQuestionBab ? filterQuestionBab.value : 'ALL';
+if (filterBab !== 'ALL') teacherQuestions = teacherQuestions.filter(q => (q.bab || '-') === filterBab);
+
+// Urutkan soal berdasarkan Bab (1, 2, 3, ...)
+teacherQuestions.sort((a, b) => {
+    const babA = parseInt((a.bab || '0').replace(/\D/g, '')) || 0;
+    const babB = parseInt((b.bab || '0').replace(/\D/g, '')) || 0;
+    return babA - babB;
+});
 
         document.getElementById('totalQuestionCount').innerText = teacherQuestions.length;
         document.getElementById('countTeacherQuestions').innerText = this.state.questions.filter(q => q.subject === teacherSubject).length;
@@ -1968,6 +1983,26 @@ class UjianKuApp {
             localStorage.setItem('ujianku_questions', JSON.stringify(this.state.questions));
         this.renderTeacherQuestions();
         this.syncDataToServer(); // <-- TAMBAHKAN INI
+    });
+}
+deleteQuestionsByBab() {
+    const filterClass = document.getElementById('filterQuestionClass').value;
+    const filterBab = document.getElementById('filterQuestionBab').value;
+    if (filterBab === 'ALL') {
+        this.showModal('Perhatian', 'Silakan pilih Bab tertentu terlebih dahulu di dropdown.', 'warning');
+        return;
+    }
+    const teacherSubject = this.state.currentTeacher.subject;
+    this.showModal('Konfirmasi Hapus', `Yakin ingin menghapus SEMUA soal di Bab "${filterBab}"?`, 'confirm', () => {
+        this.state.questions = this.state.questions.filter(q => 
+            !(q.subject === teacherSubject && 
+              (q.bab || '-') === filterBab && 
+              (filterClass === 'ALL' || q.targetClass === filterClass))
+        );
+        localStorage.setItem('ujianku_questions', JSON.stringify(this.state.questions));
+        this.renderTeacherQuestions();
+        this.syncDataToServer();
+        this.showModal('Berhasil', `Semua soal di Bab "${filterBab}" telah dihapus.`, 'warning');
     });
 }
 
@@ -2167,6 +2202,7 @@ class UjianKuApp {
                     id: Date.now() + counter,
                     teacherId: this.state.currentTeacher.id,
                     subject: this.state.currentTeacher.subject,
+                    bab : '-',
                     targetClass, type: 'pg',
                     question: line.replace(/^(?:soal\s*)?\d+[\.\)]\s*/i, ''),
                     options: {}, key: '', audio: null, image: null
@@ -2179,6 +2215,9 @@ class UjianKuApp {
                 else if (/^E[\.\)]\s*/i.test(line)) currentQ.options.E = line.replace(/^E[\.\)]\s*/i, '');
                 else if (/^Jenis:\s*essay/i.test(line)) { currentQ.type = 'essay'; currentQ.options = {}; }
                 else if (/^Jenis:\s*tf/i.test(line)) { currentQ.type = 'tf'; currentQ.options = {}; }
+                else if (/^Bab\s*[:.]?\s*/i.test(line)) {
+    currentQ.bab = line.replace(/^Bab\s*[:.]?\s*/i, '').trim();
+}
                 else if (/^Kunci:\s*/i.test(line)) {
                     const val = line.replace(/^Kunci:\s*/i, '').trim().toUpperCase();
                     if (val === 'BENAR' || val === 'TRUE') currentQ.key = 'B';
